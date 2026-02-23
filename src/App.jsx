@@ -23,7 +23,7 @@ import { RefreshCw, Loader2, ChevronDown, Lock } from 'lucide-react';
 /**
  * POKER ODDS CALCULATOR
  * Features:
- * - Real-time probability engine with cumulative logic
+ * - Real-time exact probability engine (with sub-hand detection)
  * - Proactive street detection (Flop -> Turn -> River)
  * - Sequential selection and deletion rules
  * - Random street filler / Reset board (🎲 ? / 🎲 !)
@@ -91,22 +91,41 @@ function getMadeHands(cards) {
     rankCounts[card.value] = (rankCounts[card.value] || 0) + 1;
     values.push(card.value);
   });
+  
   for (let suit in suitsCount) {
     if (suitsCount[suit].length >= 5) {
       results.FLUSH = true;
       if (checkStraightInValues(suitsCount[suit].map(c => c.value))) results.STRAIGHT_FLUSH = true;
     }
   }
+  
   if (checkStraightInValues(values)) results.STRAIGHT = true;
+  
   const counts = Object.values(rankCounts).sort((a, b) => b - a);
-  if (counts[0] >= 4) results.QUADS = true;
-  else if (counts[0] === 3) {
+  
+  // Specific sub-hand logic: Identify all valid combinations present
+  if (counts[0] >= 4) {
+    results.QUADS = true;
     results.TRIPS = true;
-    if (counts[1] >= 2) results.FULL_HOUSE = true;
+    results.PAIR = true;
+    if (counts[1] >= 2) {
+      results.FULL_HOUSE = true;
+      results.TWO_PAIR = true;
+    }
+  } else if (counts[0] === 3) {
+    results.TRIPS = true;
+    results.PAIR = true;
+    if (counts[1] >= 2) {
+      results.FULL_HOUSE = true;
+      results.TWO_PAIR = true;
+    }
   } else if (counts[0] === 2) {
     results.PAIR = true;
-    if (counts[1] >= 2) results.TWO_PAIR = true;
+    if (counts[1] >= 2) {
+      results.TWO_PAIR = true;
+    }
   }
+  
   return results;
 }
 
@@ -181,11 +200,10 @@ export default function App() {
       
       const tallyHands = (cards) => {
         const made = getMadeHands(cards);
-        let foundBetter = false;
+        // Direct tally without cumulative "foundBetter" logic
         for (const ht of HAND_TYPES) {
-          if (made[ht.id] || foundBetter) {
+          if (made[ht.id]) {
             results[ht.id]++;
-            foundBetter = true; 
           }
         }
       };
@@ -479,7 +497,7 @@ export default function App() {
                       </div>
                     );
                   })}
-                  <div className="mt-5 pt-4 border-t border-slate-800/50 text-[10px] text-slate-600 leading-relaxed italic uppercase tracking-wider text-center">Odds of holding <strong>at least</strong> this hand by the <strong>{targetStage}</strong>.</div>
+                  <div className="mt-5 pt-4 border-t border-slate-800/50 text-[10px] text-slate-600 leading-relaxed italic uppercase tracking-wider text-center">Odds of achieving each hand by the <strong>{targetStage}</strong>.</div>
                 </div>
               ) : null}
             </div>
