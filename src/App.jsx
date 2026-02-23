@@ -215,7 +215,7 @@ export default function App() {
       setBoard(newBoard);
       if (activeSlot.index < 4) {
         const nextIdx = activeSlot.index + 1;
-        if (canSelectSlot('board', nextIdx)) setActiveSlot({ type: 'board', index: nextIdx });
+        if (pocket.every(c => c !== null) && (nextIdx < 3 || newBoard.slice(0, nextIdx).every(c => c !== null))) setActiveSlot({ type: 'board', index: nextIdx });
       }
     }
     setCoachAdvice(""); 
