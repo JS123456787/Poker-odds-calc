@@ -1,3 +1,25 @@
+// POKER ODDS CALCULATOR - GitHub Ready
+// 
+// --- PROJECT SETUP INSTRUCTIONS ---
+// 1. Create your project: npm create vite@latest poker-odds-calculator -- --template react
+// 2. Install dependencies: npm install lucide-react tailwindcss@3 postcss autoprefixer
+// 3. Initialize Tailwind: npx tailwindcss init -p
+//
+// --- TAILWIND CONFIGURATION (Paste into tailwind.config.js) ---
+// export default {
+//   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+//   theme: { extend: {} },
+//   plugins: [],
+// }
+//
+// --- CSS SETUP (Paste into src/index.css) ---
+// @tailwind base;
+// @tailwind components;
+// @tailwind utilities;
+//
+// --- ENVIRONMENT SETUP ---
+// Create a .env file in your root and add: VITE_GEMINI_API_KEY=your_key_here
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, Loader2, ChevronDown, Lock, Sparkles, MessageSquare } from 'lucide-react';
 
@@ -200,24 +222,47 @@ export default function App() {
     return false;
   };
 
+  // Helper to determine the next logical, legal empty slot
+  const getNextLogicalSlot = (currentPocket, currentBoard) => {
+    // 1. Fill pocket first
+    if (currentPocket.includes(null)) {
+      return { type: 'pocket', index: currentPocket.indexOf(null) };
+    }
+    // 2. Fill flop
+    if (currentBoard.slice(0, 3).includes(null)) {
+      return { type: 'board', index: currentBoard.indexOf(null) };
+    }
+    // 3. Fill turn
+    if (currentBoard[3] === null) {
+      return { type: 'board', index: 3 };
+    }
+    // 4. Fill river
+    if (currentBoard[4] === null) {
+      return { type: 'board', index: 4 };
+    }
+    // 5. Board is full
+    return null;
+  };
+
   const handleCardPick = (card) => {
     if (isBoardFull) return;
     if (!activeSlot || !canSelectSlot(activeSlot.type, activeSlot.index)) return;
+    
+    // We create local copies of the state arrays so we can 
+    // immediately calculate the next logical slot without waiting for React.
+    let newPocket = [...pocket];
+    let newBoard = [...board];
+
     if (activeSlot.type === 'pocket') {
-      const newPocket = [...pocket];
       newPocket[activeSlot.index] = card;
       setPocket(newPocket);
-      if (activeSlot.index === 0 && !newPocket[1]) setActiveSlot({ type: 'pocket', index: 1 });
-      else if (activeSlot.index === 1 && !board[0]) setActiveSlot({ type: 'board', index: 0 });
     } else if (activeSlot.type === 'board') {
-      const newBoard = [...board];
       newBoard[activeSlot.index] = card;
       setBoard(newBoard);
-      if (activeSlot.index < 4) {
-        const nextIdx = activeSlot.index + 1;
-        if (canSelectSlot('board', nextIdx)) setActiveSlot({ type: 'board', index: nextIdx });
-      }
     }
+    
+    // Immediately advance cursor
+    setActiveSlot(getNextLogicalSlot(newPocket, newBoard));
     setCoachAdvice(""); 
   };
 
@@ -237,42 +282,45 @@ export default function App() {
     if (availableDeck.length === 0) return;
     const shuffled = availableDeck.sort(() => Math.random() - 0.5);
     let pickIdx = 0;
+    
+    let newPocket = [...pocket];
+    let newBoard = [...board];
     const isPocketFilled = pocket.every(c => c !== null);
+
     if (!isPocketFilled) {
-      const newPocket = [...pocket];
       for (let i = 0; i < 2; i++) if (newPocket[i] === null) newPocket[i] = shuffled[pickIdx++];
-      setPocket(newPocket);
-      if (!board[0]) setActiveSlot({ type: 'board', index: 0 });
     } else if (!board.slice(0, 3).every(c => c !== null)) {
-      const newBoard = [...board];
       for (let i = 0; i < 3; i++) if (newBoard[i] === null) newBoard[i] = shuffled[pickIdx++];
-      setBoard(newBoard);
-      if (!board[3]) setActiveSlot({ type: 'board', index: 3 });
     } else if (board[3] === null) {
-      const newBoard = [...board];
       newBoard[3] = shuffled[pickIdx++];
-      setBoard(newBoard);
-      if (!board[4]) setActiveSlot({ type: 'board', index: 4 });
     } else {
-      const newBoard = [...board];
       newBoard[4] = shuffled[pickIdx++];
-      setBoard(newBoard);
-      setActiveSlot(null);
     }
+
+    setPocket(newPocket);
+    setBoard(newBoard);
+    
+    // Immediately advance cursor
+    setActiveSlot(getNextLogicalSlot(newPocket, newBoard));
     setCoachAdvice("");
   };
 
   const removeCard = (e, type, index) => {
     e.stopPropagation();
+    
+    // If we're removing a card, it's safe to use the existing states 
+    // because we are explicitly targeting the slot we just emptied.
+    let newPocket = [...pocket];
+    let newBoard = [...board];
+    
     if (type === 'pocket') {
-      const newPocket = [...pocket];
       newPocket[index] = null;
       setPocket(newPocket);
     } else {
-      const newBoard = [...board];
       newBoard[index] = null;
       setBoard(newBoard);
     }
+    
     setIsManualTarget(false);
     setActiveSlot({ type, index });
     setOdds(null);
@@ -330,11 +378,17 @@ export default function App() {
     const isActive = activeSlot?.type === type && activeSlot?.index === index;
     const isRed = card?.suit === '♥' || card?.suit === '♦';
     const canSelect = canSelectSlot(type, index);
+    
+    // We only allow clicking to activate a slot if it is legal based on Poker rules.
+    const handleSlotClick = () => {
+      if (canSelect) setActiveSlot({ type, index });
+    }
+
     return (
       <div className={`flex flex-col items-center mx-1 transition-opacity duration-300 ${!canSelect && !card ? 'opacity-30' : 'opacity-100'}`}>
         <span className="text-xs text-slate-100/60 mb-1 font-semibold tracking-wider uppercase drop-shadow-sm">{label}</span>
         <div 
-          onClick={() => canSelect && setActiveSlot({ type, index })}
+          onClick={handleSlotClick}
           className={`relative w-16 h-24 sm:w-20 sm:h-28 rounded-lg flex flex-col justify-center items-center transition-all border-2 shadow-sm
             ${!canSelect ? 'cursor-not-allowed grayscale' : 'cursor-pointer'}
             ${isActive ? 'border-red-500 ring-4 ring-red-500/30 shadow-red-500/50 scale-105' : 'border-black/20 hover:border-white/30'}
