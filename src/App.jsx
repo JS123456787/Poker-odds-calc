@@ -346,7 +346,7 @@ export default function App() {
 
     const prompt = `NL Hold'em analysis: Pocket: ${pocketStr} Board: ${boardStr} Target: ${targetStage} Odds: ${oddsStr}. Max 3 sentences strategy advice. Be elite and professional.`;
     
-    const apiKey = "";
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     let delay = 1000;
     for (let i = 0; i < 5; i++) {
       try {
