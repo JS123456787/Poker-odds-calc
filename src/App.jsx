@@ -16,12 +16,18 @@
 // @tailwind base;
 // @tailwind components;
 // @tailwind utilities;
-//
-// --- ENVIRONMENT SETUP ---
-// Create a .env file in your root and add: VITE_GEMINI_API_KEY=your_key_here
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Loader2, ChevronDown, Lock, Sparkles, MessageSquare } from 'lucide-react';
+import { RefreshCw, Loader2, ChevronDown, Lock } from 'lucide-react';
+
+/**
+ * POKER ODDS CALCULATOR
+ * Features:
+ * - Real-time probability engine with cumulative logic
+ * - Proactive street detection (Flop -> Turn -> River)
+ * - Sequential selection and deletion rules
+ * - Random street filler / Reset board (🎲 ? / 🎲 !)
+ */
 
 // --- CONSTANTS & POKER LOGIC ---
 
@@ -137,10 +143,6 @@ export default function App() {
   const [isManualTarget, setIsManualTarget] = useState(false);
   const [odds, setOdds] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
-  
-  const [coachAdvice, setCoachAdvice] = useState("");
-  const [isAdviceLoading, setIsAdviceLoading] = useState(false);
-  const [adviceError, setAdviceError] = useState("");
 
   const selectedCards = useMemo(() => {
     return [...pocket, ...board].filter(c => c !== null).map(c => c.id);
@@ -161,7 +163,6 @@ export default function App() {
   useEffect(() => {
     if (pocket.includes(null)) {
       setOdds(null);
-      setCoachAdvice("");
       return;
     }
     setIsCalculating(true);
@@ -263,7 +264,6 @@ export default function App() {
     
     // Immediately advance cursor
     setActiveSlot(getNextLogicalSlot(newPocket, newBoard));
-    setCoachAdvice(""); 
   };
 
   const resetHand = () => {
@@ -273,7 +273,6 @@ export default function App() {
     setOdds(null);
     setTargetStage('Flop');
     setIsManualTarget(false);
-    setCoachAdvice("");
   };
 
   const handleRandomFill = () => {
@@ -302,7 +301,6 @@ export default function App() {
     
     // Immediately advance cursor
     setActiveSlot(getNextLogicalSlot(newPocket, newBoard));
-    setCoachAdvice("");
   };
 
   const removeCard = (e, type, index) => {
@@ -324,7 +322,6 @@ export default function App() {
     setIsManualTarget(false);
     setActiveSlot({ type, index });
     setOdds(null);
-    setCoachAdvice("");
   };
 
   const currentBestHand = useMemo(() => {
@@ -335,44 +332,6 @@ export default function App() {
     if (bestHandType) return bestHandType;
     return { id: 'HIGH_CARD', name: 'High Card' };
   }, [pocket, board]);
-
-  const getCoachAdvice = async () => {
-    if (!pocket[0] || !pocket[1] || !odds) return;
-    setIsAdviceLoading(true);
-    setAdviceError("");
-    const pocketStr = pocket.map(c => c.id).join(', ');
-    const boardStr = board.filter(c => c !== null).map(c => c.id).join(', ') || "None";
-    const oddsStr = Object.entries(odds).filter(([_, v]) => v > 0).map(([k, v]) => `${k}: ${v.toFixed(2)}%`).join(', ');
-
-    const prompt = `NL Hold'em analysis: Pocket: ${pocketStr} Board: ${boardStr} Target: ${targetStage} Odds: ${oddsStr}. Max 3 sentences strategy advice. Be elite and professional.`;
-    
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    let delay = 1000;
-    for (let i = 0; i < 5; i++) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: "You are a professional poker coach. Provide strategic analysis based on odds." }] }
-          })
-        });
-        if (!response.ok) throw new Error();
-        const data = await response.json();
-        setCoachAdvice(data.candidates?.[0]?.content?.parts?.[0]?.text);
-        setIsAdviceLoading(false);
-        return;
-      } catch {
-        if (i === 4) {
-          setAdviceError("Coach is thinking... Try again in a second.");
-          setIsAdviceLoading(false);
-        }
-        await new Promise(r => setTimeout(r, delay));
-        delay *= 2;
-      }
-    }
-  };
 
   const renderCardSlot = (card, type, index, label) => {
     const isActive = activeSlot?.type === type && activeSlot?.index === index;
@@ -490,7 +449,7 @@ export default function App() {
               <div className="flex items-center justify-between mb-5 border-b border-slate-800/50 pb-3">
                 <h2 className="text-sm font-black uppercase tracking-widest text-slate-500">Odds by the:</h2>
                 <div className="relative group">
-                  <select value={targetStage} onChange={(e) => setTargetStage(e.target.value)} className="appearance-none bg-black text-white pl-4 pr-10 py-1.5 rounded-lg text-sm font-black border border-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all uppercase">
+                  <select value={targetStage} onChange={(e) => { setTargetStage(e.target.value); setIsManualTarget(true); }} className="appearance-none bg-black text-white pl-4 pr-10 py-1.5 rounded-lg text-sm font-black border border-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all uppercase">
                     {STAGES.map(stage => <option key={stage.label} value={stage.label}>{stage.label}</option>)}
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
@@ -530,21 +489,6 @@ export default function App() {
                 <div className="text-xs font-bold text-slate-500 mb-1">High hand:</div>
                 <div className="text-lg font-extrabold text-slate-300 tracking-tighter leading-tight">{currentBestHand.name}</div>
                 <div className="text-[11px] font-bold text-slate-400 italic mt-1">{HAND_FREQUENCIES[currentBestHand.id]}</div>
-              </div>
-            )}
-
-            {odds && (
-              <div className="bg-slate-900/60 border border-red-600/30 rounded-2xl p-5 shadow-2xl backdrop-blur-md border-dashed">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-red-500"><Sparkles size={16} /><span className="text-xs font-black uppercase tracking-widest">Strategy Coach</span></div>
-                    <button onClick={getCoachAdvice} disabled={isAdviceLoading} className="text-[10px] font-bold bg-red-600 hover:bg-red-700 disabled:bg-slate-800 text-white px-2 py-1 rounded transition-colors uppercase tracking-tighter flex items-center gap-1">
-                      {isAdviceLoading ? <Loader2 size={10} className="animate-spin" /> : <MessageSquare size={10} />} ✨ Ask Coach
-                    </button>
-                  </div>
-                  {coachAdvice ? <div className="text-[12px] text-slate-300 leading-relaxed bg-black/40 p-3 rounded-lg border border-slate-800">"{coachAdvice}"</div> : 
-                    <div className="text-[10px] text-slate-600 italic text-center py-2">{adviceError || "Need strategy advice? Get an AI analysis of your odds."}</div>}
-                </div>
               </div>
             )}
           </div>
